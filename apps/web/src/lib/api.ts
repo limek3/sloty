@@ -1,3 +1,4 @@
+// apps/web/src/lib/api.ts
 import { createClient } from "@supabase/supabase-js";
 import { getInitData } from "./telegram";
 import type { Appointment, Master, Service, WorkingHour } from "./types";
@@ -9,12 +10,17 @@ export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: false }
 });
 
-async function invoke<T>(fn: string, body: unknown): Promise<T> {
+type InvokeBody = Record<string, any> | undefined;
+
+async function invoke<T>(fn: string, body: InvokeBody): Promise<T> {
   const initData = getInitData();
+  if (!initData) throw new Error("OPEN_IN_TELEGRAM");
+
   const { data, error } = await supabase.functions.invoke(fn, {
     body,
     headers: { "x-telegram-init-data": initData }
   });
+
   if (error) throw new Error(error.message);
   if (!data?.ok) throw new Error(data?.error ?? "Unknown error");
   return data as T;
@@ -38,17 +44,25 @@ export async function apiGetSlots(args: { masterId: string; serviceId: string; f
   });
 }
 
-export async function apiCreateAppointment(args: { masterId: string; serviceId: string; startAt: string; phone?: string }) {
-  return invoke<{ ok: true; appointment: { id: string; start_at: string; end_at: string; status: string } }>("create_appointment", {
-    master_id: args.masterId,
-    service_id: args.serviceId,
-    start_at: args.startAt,
-    client_phone: args.phone ?? null
-  });
+export async function apiCreateAppointment(args: {
+  masterId: string;
+  serviceId: string;
+  startAt: string;
+  phone?: string;
+}) {
+  return invoke<{ ok: true; appointment: { id: string; start_at: string; end_at: string; status: string } }>(
+    "create_appointment",
+    {
+      master_id: args.masterId,
+      service_id: args.serviceId,
+      start_at: args.startAt,
+      client_phone: args.phone ?? null
+    }
+  );
 }
 
 export async function apiMyAppointments(): Promise<{ ok: true; appointments: Appointment[] }> {
-  return invoke("my_appointments", {});
+  return invoke("my_appointments", {}); // или undefined
 }
 
 export async function apiCancelAppointment(appointmentId: string, reason?: string): Promise<{ ok: true }> {
@@ -64,15 +78,23 @@ export async function apiMasterMe(): Promise<{ ok: true; master: Master }> {
   return invoke("master_me", {});
 }
 
-export async function apiMasterUpdateProfile(patch: Partial<Pick<Master, "display_name" | "city" | "bio" | "timezone">>) {
-  return invoke<{ ok: true; master: Master }>("master_update_profile", patch);
+export async function apiMasterUpdateProfile(
+  patch: Partial<Pick<Master, "display_name" | "city" | "bio" | "timezone">>
+) {
+  return invoke<{ ok: true; master: Master }>("master_update_profile", patch as Record<string, any>);
 }
 
 export async function apiMasterListServices(): Promise<{ ok: true; services: Service[] }> {
   return invoke("master_list_services", {});
 }
 
-export async function apiMasterUpsertService(svc: { id?: string; title: string; duration_min: number; price_rub: number; is_active?: boolean }) {
+export async function apiMasterUpsertService(svc: {
+  id?: string;
+  title: string;
+  duration_min: number;
+  price_rub: number;
+  is_active?: boolean;
+}) {
   return invoke<{ ok: true; service: Service }>("master_upsert_service", svc);
 }
 
