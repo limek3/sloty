@@ -1,0 +1,13 @@
+{
+  "name": "tg-booking-miniapp",
+  "private": true,
+  "packageManager": "pnpm@9.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:web": "pnpm -C apps/web dev",
+    "dev:bot": "pnpm -C apps/bot dev",
+    "build": "pnpm -C apps/web build && pnpm -C apps/bot build"
+  }
+}

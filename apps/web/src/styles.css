@@ -1,0 +1,66 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+/* Why: premium feel + readability */
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: radial-gradient(
+      900px 600px at 20% 5%,
+      rgba(255, 255, 255, 0.06),
+      transparent 50%
+    ),
+    radial-gradient(
+      700px 500px at 90% 20%,
+      rgba(255, 255, 255, 0.04),
+      transparent 55%
+    ),
+    radial-gradient(
+      800px 600px at 40% 90%,
+      rgba(255, 255, 255, 0.05),
+      transparent 55%
+    ),
+    rgb(10, 10, 10);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* subtle scrollbars */
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+*::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 999px;
+  border: 2px solid rgba(0, 0, 0, 0);
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+@layer components {
+  .glass {
+    @apply border border-neutral-800/70 bg-neutral-950/45 backdrop-blur-xl shadow-soft;
+  }
+  .title {
+    @apply text-2xl font-semibold tracking-tight;
+  }
+  .muted {
+    @apply text-sm text-neutral-400;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full border border-neutral-800/70 bg-neutral-950/40 px-3 py-1 text-xs text-neutral-200;
+  }
+}
