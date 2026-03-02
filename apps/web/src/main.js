@@ -1,0 +1,10 @@
+import { jsx as _jsx } from "react/jsx-runtime";
+import React from "react";
+import ReactDOM from "react-dom/client";
+import { BrowserRouter } from "react-router-dom";
+import { App } from "./app";
+import { ErrorBoundary } from "./ui/error-boundary";
+import { ThemeProvider } from "./lib/theme";
+import { ToastProvider } from "./ui/toast";
+import "./styles.css";
+ReactDOM.createRoot(document.getElementById("root")).render(_jsx(React.StrictMode, { children: _jsx(ErrorBoundary, { title: "\u041E\u0448\u0438\u0431\u043A\u0430 \u0438\u043D\u0442\u0435\u0440\u0444\u0435\u0439\u0441\u0430", children: _jsx(ThemeProvider, { children: _jsx(ToastProvider, { children: _jsx(BrowserRouter, { children: _jsx(App, {}) }) }) }) }) }));

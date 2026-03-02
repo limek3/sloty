@@ -1,9 +1,8 @@
-// apps/web/src/ui/input.tsx
 import React from "react";
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
-    <input
+    <select
       {...props}
       className={
         "w-full text-sm font-medium outline-none transition focus:ring-2 focus:ring-[color:var(--ring)] " +

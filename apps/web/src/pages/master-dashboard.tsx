@@ -1,13 +1,11 @@
-// apps/web/src/pages/master-dashboard.tsx
 import React from "react";
-import { useNavigate } from "react-router-dom";
 import {
   apiMasterListAppointments,
   apiMasterListServices,
   apiMasterMe
 } from "../lib/api";
 import { initTelegramUi, haptic } from "../lib/telegram";
-import { fmtHuman, ymd, ymdTodayUtc } from "../lib/time";
+import { fmtHuman, ymdTodayUtc } from "../lib/time";
 import type { Appointment, Master, Service } from "../lib/types";
 import { AppShell } from "../ui/app-shell";
 import { Card, CardContent, CardHeader } from "../ui/card";
@@ -23,7 +21,6 @@ type Scope = "day" | "week";
 type ClientItem = {
   tgId: number;
   name: string;
-  phone?: string;
   lastVisitIso?: string;
   visits: number;
 };
@@ -44,7 +41,9 @@ function buildClients(appts: Appointment[]): ClientItem[] {
     if (!cur.lastVisitIso || new Date(ts).getTime() > new Date(cur.lastVisitIso).getTime()) cur.lastVisitIso = ts;
     map.set(id, cur);
   }
-  return Array.from(map.values()).sort((a, b) => (b.lastVisitIso ? Date.parse(b.lastVisitIso) : 0) - (a.lastVisitIso ? Date.parse(a.lastVisitIso) : 0));
+  return Array.from(map.values()).sort(
+    (a, b) => (b.lastVisitIso ? Date.parse(b.lastVisitIso) : 0) - (a.lastVisitIso ? Date.parse(a.lastVisitIso) : 0)
+  );
 }
 
 function InternalTabbar(props: { value: Tab; onChange: (t: Tab) => void; onNew: () => void }) {
@@ -55,10 +54,7 @@ function InternalTabbar(props: { value: Tab; onChange: (t: Tab) => void; onNew: 
   ];
 
   return (
-    <div
-      className="fixed left-0 right-0 bottom-0 z-40"
-      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
-    >
+    <div className="fixed left-0 right-0 bottom-0 z-40" style={{ paddingBottom: "env(safe-area-inset-bottom)" }}>
       <div className="mx-auto max-w-md px-4 pb-4">
         <div
           className="px-2 py-2"
@@ -137,8 +133,6 @@ function InternalTabbar(props: { value: Tab; onChange: (t: Tab) => void; onNew: 
 }
 
 export function MasterDashboardPage() {
-  const nav = useNavigate();
-
   const [master, setMaster] = React.useState<Master | null>(null);
   const [services, setServices] = React.useState<Service[]>([]);
   const [appts, setAppts] = React.useState<Appointment[]>([]);
@@ -148,13 +142,12 @@ export function MasterDashboardPage() {
   const [tab, setTab] = React.useState<Tab>("bookings");
   const [scope, setScope] = React.useState<Scope>("day");
 
-  // New booking (screen like reference)
   const [mode, setMode] = React.useState<"main" | "new">("main");
+
   const [clientId, setClientId] = React.useState<string>("");
   const [serviceId, setServiceId] = React.useState<string>("");
   const [fromDate, setFromDate] = React.useState(ymdTodayUtc());
-  const [slotDay, setSlotDay] = React.useState(ymdTodayUtc());
-  const [slotTimeIso, setSlotTimeIso] = React.useState<string>("");
+  const [hintIso, setHintIso] = React.useState<string>("");
   const [shareUrl, setShareUrl] = React.useState<string>("");
 
   const [clientSearch, setClientSearch] = React.useState("");
@@ -188,49 +181,44 @@ export function MasterDashboardPage() {
   const filteredClients = clients.filter((c) => {
     const q = clientSearch.trim().toLowerCase();
     if (!q) return true;
-    return String(c.tgId).includes(q) || (c.name ?? "").toLowerCase().includes(q);
+    return String(c.tgId).includes(q) || c.name.toLowerCase().includes(q);
   });
 
   function openNew() {
     setMode("new");
-    setTab("bookings");
     setShareUrl("");
-    setSlotTimeIso("");
+    setHintIso("");
     setFromDate(ymdTodayUtc());
-    setSlotDay(ymdTodayUtc());
     haptic("light");
   }
 
   function closeNew() {
     setMode("main");
     setShareUrl("");
-    setSlotTimeIso("");
+    setHintIso("");
     haptic("light");
   }
 
   function makeShareLink() {
     if (!master) return;
-    // функционально: мастер выбирает услугу/дату/время -> отправляет клиенту ссылку
-    // клиент откроет страницу мастера и увидит нужную услугу/неделю (и выберет слот)
     const base = window.location.origin;
     const url = new URL(`${base}/m/${master.id}`);
     if (serviceId) url.searchParams.set("serviceId", serviceId);
     if (fromDate) url.searchParams.set("fromDate", fromDate);
-    if (slotTimeIso) url.searchParams.set("hint", slotTimeIso); // мягкая подсказка (UI можно позже подсветить)
+    if (hintIso) url.searchParams.set("hint", hintIso);
     setShareUrl(url.toString());
+    haptic("medium");
   }
 
   async function copyOrShare(url: string) {
-    haptic("light");
     try {
       if ((navigator as any).share) await (navigator as any).share({ url, title: "Запись" });
       else await navigator.clipboard.writeText(url);
+      haptic("light");
     } catch {
       // ignore
     }
   }
-
-  const todayYmd = ymdTodayUtc();
 
   return (
     <AppShell
@@ -249,7 +237,6 @@ export function MasterDashboardPage() {
       }
     >
       <div className="tabbar-safe space-y-4">
-        {/* MODE: NEW BOOKING */}
         {mode === "new" && (
           <Card>
             <CardHeader>
@@ -259,7 +246,10 @@ export function MasterDashboardPage() {
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="muted">Клиент</div>
-                <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                <Select
+                  value={clientId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setClientId(e.target.value)}
+                >
                   {clients.length === 0 && <option value="">Нет клиентов</option>}
                   {clients.map((c) => (
                     <option key={c.tgId} value={String(c.tgId)}>
@@ -271,7 +261,10 @@ export function MasterDashboardPage() {
 
               <div className="space-y-2">
                 <div className="muted">Услуга</div>
-                <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+                <Select
+                  value={serviceId}
+                  onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setServiceId(e.target.value)}
+                >
                   {services.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.title} • {s.duration_min} мин • {s.price_rub} ₽
@@ -281,32 +274,31 @@ export function MasterDashboardPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="muted">Дата (старт)</div>
-                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+                <div className="muted">Дата (старт недели)</div>
+                <Input
+                  type="date"
+                  value={fromDate}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => setFromDate(e.target.value)}
+                />
               </div>
 
               <div className="surface-soft p-4 space-y-2">
                 <div className="text-sm font-semibold">Подсказка времени</div>
-                <div className="muted">Можно выбрать конкретное время (для удобства), но клиент подтвердит сам.</div>
+                <div className="muted">Можно задать “предлагаемое время” — клиент подтвердит в мини-аппе.</div>
                 <Input
                   type="datetime-local"
-                  value={slotTimeIso ? slotTimeIso.slice(0, 16) : ""}
-                  onChange={(e) => setSlotTimeIso(e.target.value ? new Date(e.target.value).toISOString() : "")}
+                  value={hintIso ? hintIso.slice(0, 16) : ""}
+                  onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
+                    setHintIso(e.target.value ? new Date(e.target.value).toISOString() : "");
+                  }}
                 />
               </div>
 
-              <Button
-                onClick={() => {
-                  makeShareLink();
-                  haptic("medium");
-                }}
-              >
-                Сформировать ссылку
-              </Button>
+              <Button onClick={makeShareLink}>Сформировать ссылку</Button>
 
               {shareUrl && (
                 <div className="surface-soft p-4 space-y-2">
-                  <div className="text-sm font-semibold">Ссылка для клиента</div>
+                  <div className="text-sm font-semibold">Ссылка</div>
                   <div className="muted" style={{ wordBreak: "break-all" }}>
                     {shareUrl}
                   </div>
@@ -314,28 +306,20 @@ export function MasterDashboardPage() {
                     <Button full={false} size="sm" variant="secondary" onClick={() => copyOrShare(shareUrl)}>
                       Share / Copy
                     </Button>
-                    <Button full={false} size="sm" variant="ghost" onClick={() => nav(`/m/${master?.id ?? ""}`)}>
+                    <Button full={false} size="sm" variant="ghost" onClick={() => window.open(shareUrl, "_blank")}>
                       Открыть
                     </Button>
                   </div>
                 </div>
               )}
-
-              <div className="muted">
-                Следующий шаг (улучшим): “создать запись вручную” прямо из кабинета + авто-уведомление клиенту.
-              </div>
             </CardContent>
           </Card>
         )}
 
-        {/* MODE: MAIN */}
         {mode === "main" && (
           <>
-            {/* Tabs header-like line */}
             <div className="flex items-center justify-between">
-              <div className="muted">
-                {tab === "bookings" ? "Записи" : tab === "calendar" ? "Календарь" : "Клиенты"}
-              </div>
+              <div className="muted">{tab === "bookings" ? "Записи" : tab === "calendar" ? "Календарь" : "Клиенты"}</div>
               <Badge tone="accent">{loading ? "…" : "PRO UI"}</Badge>
             </div>
 
@@ -354,7 +338,7 @@ export function MasterDashboardPage() {
                   <CardHeader>
                     <div className="text-sm font-semibold">{scope === "day" ? "Сегодня" : "Неделя"}</div>
                     <div className="muted">
-                      Записей: {appts.length} • Подтверждено: {appts.filter((a) => a.status === "confirmed").length} • Отмен:{" "}
+                      Записей: {appts.length} • Подтв: {appts.filter((a) => a.status === "confirmed").length} • Отмен:{" "}
                       {appts.filter((a) => a.status === "canceled").length}
                     </div>
                   </CardHeader>
@@ -362,7 +346,6 @@ export function MasterDashboardPage() {
                     {loading && <div className="muted">Загрузка…</div>}
                     {!loading && appts.length === 0 && <div className="muted">Пока нет записей.</div>}
 
-                    {/* Day list */}
                     {!loading && scope === "day" && (
                       <div className="space-y-2">
                         {appts
@@ -380,11 +363,25 @@ export function MasterDashboardPage() {
                             >
                               <div className="flex items-start justify-between gap-3">
                                 <div className="min-w-0">
-                                  <div className="text-sm font-semibold">{fmtHuman(a.start_at).split(", ").slice(-1)[0]}</div>
-                                  <div className="text-sm font-semibold truncate">{a.client_tg_user_id ? `Клиент TG ${a.client_tg_user_id}` : "Клиент"}</div>
+                                  <div className="text-sm font-semibold">
+                                    {fmtHuman(a.start_at).split(", ").slice(-1)[0]}
+                                  </div>
+                                  <div className="text-sm font-semibold truncate">
+                                    {a.client_tg_user_id ? `Клиент TG ${a.client_tg_user_id}` : "Клиент"}
+                                  </div>
                                   <div className="muted">{a.service.title}</div>
                                 </div>
-                                <Badge tone={a.status === "confirmed" ? "good" : a.status === "pending" ? "warn" : a.status === "canceled" ? "bad" : "neutral"}>
+                                <Badge
+                                  tone={
+                                    a.status === "confirmed"
+                                      ? "good"
+                                      : a.status === "pending"
+                                      ? "warn"
+                                      : a.status === "canceled"
+                                      ? "bad"
+                                      : "neutral"
+                                  }
+                                >
                                   {a.status === "confirmed" ? "Подтверждено" : a.status}
                                 </Badge>
                               </div>
@@ -393,27 +390,10 @@ export function MasterDashboardPage() {
                       </div>
                     )}
 
-                    {/* Week view (MVP, красиво) */}
                     {!loading && scope === "week" && (
                       <div className="surface-soft p-4">
                         <div className="text-sm font-semibold">Неделя</div>
-                        <div className="muted">Сделаю полноценную сетку “день/время” следующим шагом.</div>
-                        <div className="mt-3 grid grid-cols-7 gap-2">
-                          {Array.from({ length: 7 }).map((_, i) => (
-                            <div
-                              key={i}
-                              className="py-2 text-center text-xs font-semibold"
-                              style={{
-                                borderRadius: 14,
-                                background: "var(--surface)",
-                                border: "1px solid var(--border)",
-                                color: "var(--muted)"
-                              }}
-                            >
-                              {i + 1}
-                            </div>
-                          ))}
-                        </div>
+                        <div className="muted">Следующим шагом сделаем полноценную сетку “день/время” как в референсе.</div>
                       </div>
                     )}
                   </CardContent>
@@ -425,12 +405,12 @@ export function MasterDashboardPage() {
               <Card>
                 <CardHeader>
                   <div className="text-sm font-semibold">Календарь</div>
-                  <div className="muted">MVP: быстрый обзор. Дальше сделаем полноценный календарь как на iOS.</div>
+                  <div className="muted">MVP экран. Дальше сделаем как iOS.</div>
                 </CardHeader>
                 <CardContent className="space-y-3">
                   <div className="surface-soft p-4">
                     <div className="text-sm font-semibold">Сегодня</div>
-                    <div className="muted">{todayYmd}</div>
+                    <div className="muted">{ymdTodayUtc()}</div>
                   </div>
                   <Button onClick={openNew}>Новая запись</Button>
                 </CardContent>
@@ -444,7 +424,11 @@ export function MasterDashboardPage() {
                   <div className="muted">Поиск и история визитов</div>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <Input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Поиск" />
+                  <Input
+                    value={clientSearch}
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => setClientSearch(e.target.value)}
+                    placeholder="Поиск"
+                  />
 
                   {filteredClients.length === 0 && <div className="muted">Пока нет клиентов.</div>}
 
@@ -458,17 +442,24 @@ export function MasterDashboardPage() {
                         <div className="flex items-center justify-between gap-3">
                           <div className="min-w-0">
                             <div className="text-sm font-semibold truncate">{c.name}</div>
-                            <div className="muted">Последний визит: {c.lastVisitIso ? fmtHuman(c.lastVisitIso) : "—"}</div>
+                            <div className="muted">
+                              Последний визит: {c.lastVisitIso ? fmtHuman(c.lastVisitIso) : "—"}
+                            </div>
                           </div>
                           <Badge tone="neutral">{c.visits}</Badge>
                         </div>
 
                         <div className="mt-3 flex gap-2">
-                          <Button full={false} size="sm" variant="secondary" onClick={() => { setClientId(String(c.tgId)); openNew(); }}>
+                          <Button
+                            full={false}
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => {
+                              setClientId(String(c.tgId));
+                              openNew();
+                            }}
+                          >
                             Новая запись
-                          </Button>
-                          <Button full={false} size="sm" variant="ghost" onClick={() => copyOrShare(`tg://user?id=${c.tgId}`)}>
-                            TG
                           </Button>
                         </div>
                       </div>
@@ -481,7 +472,6 @@ export function MasterDashboardPage() {
         )}
       </div>
 
-      {/* Internal master tabbar like reference */}
       <InternalTabbar
         value={tab}
         onChange={(t) => {
@@ -489,7 +479,7 @@ export function MasterDashboardPage() {
           if (mode !== "main") setMode("main");
           haptic("light");
         }}
-        onNew={() => openNew()}
+        onNew={openNew}
       />
     </AppShell>
   );

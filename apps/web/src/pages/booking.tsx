@@ -1,4 +1,3 @@
-// apps/web/src/pages/booking.tsx
 import React from "react";
 import { useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { apiCreateAppointment, apiGetSlots, apiListServices } from "../lib/api";
@@ -45,12 +44,14 @@ export function BookingPage() {
         const s = await apiListServices(masterId);
         setServices(s.services);
         if (!serviceId && s.services[0]?.id) setServiceId(s.services[0].id);
-      } catch (e: any) {
-        setError(e?.message ?? "Ошибка загрузки услуг");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка загрузки услуг";
+        setError(msg);
       } finally {
         setLoading(false);
       }
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [masterId]);
 
   React.useEffect(() => {
@@ -60,12 +61,14 @@ export function BookingPage() {
         setError(null);
         const res = await apiGetSlots({ masterId, serviceId, fromDate, days: 7 });
         setSlots(res.slots);
+
         const keys = Object.keys(res.slots);
         const firstNonEmpty = keys.find((k) => (res.slots[k] ?? []).length > 0) ?? keys[0] ?? fromDate;
         setActiveDay(firstNonEmpty);
         setSelected("");
-      } catch (e: any) {
-        setError(e?.message ?? "Ошибка слотов");
+      } catch (e: unknown) {
+        const msg = e instanceof Error ? e.message : "Ошибка слотов";
+        setError(msg);
       }
     })();
   }, [masterId, serviceId, fromDate]);
@@ -86,20 +89,23 @@ export function BookingPage() {
       }
     >
       <div className="flex items-center justify-between">
-        <div className="muted">Выберите услугу и время</div>
+        <div className="muted">Услуга → день → время</div>
         {service && <Badge tone="accent">{service.duration_min} мин • {service.price_rub} ₽</Badge>}
       </div>
 
       <Card>
         <CardHeader>
           <div className="text-sm font-semibold">Параметры</div>
-          <div className="muted">Услуга → день → слот</div>
+          <div className="muted">Выберите услугу и слот</div>
         </CardHeader>
 
         <CardContent className="space-y-4">
           <div className="space-y-2">
             <div className="muted">Услуга</div>
-            <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+            <Select
+              value={serviceId}
+              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setServiceId(e.target.value)}
+            >
               {services.map((s) => (
                 <option key={s.id} value={s.id}>
                   {s.title} • {s.duration_min} мин • {s.price_rub} ₽
@@ -113,20 +119,15 @@ export function BookingPage() {
             <Input
               type="date"
               value={fromDate}
-              onChange={(e) => {
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => {
                 setFromDate(e.target.value);
                 setSelected("");
               }}
             />
           </div>
 
-          {error && (
-            <div className="text-sm" style={{ color: "var(--danger)" }}>
-              {error}
-            </div>
-          )}
+          {error && <div className="text-sm" style={{ color: "var(--danger)" }}>{error}</div>}
 
-          {/* Weekday chips */}
           <div className="space-y-2">
             <div className="muted">Неделя</div>
             <div className="flex gap-2 overflow-auto pb-1">
@@ -163,22 +164,17 @@ export function BookingPage() {
             </div>
           </div>
 
-          {/* Slot grid */}
           <div className="space-y-2">
             <div className="muted">Время</div>
 
             {loading && <div className="muted">Загрузка…</div>}
             {!loading && daySlots.length === 0 && <div className="muted">На этот день слотов нет.</div>}
 
-            <div
-              className="gap-2"
-              style={{
-                display: "grid",
-                gridTemplateColumns: "repeat(3, minmax(0, 1fr))"
-              }}
-            >
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 8 }}>
               {daySlots.slice(0, 24).map((iso) => {
                 const active = iso === selected;
+                const timeOnly = fmtHuman(iso).split(", ").slice(-1)[0];
+
                 return (
                   <button
                     key={iso}
@@ -194,7 +190,7 @@ export function BookingPage() {
                       color: active ? "var(--accent-fg)" : "var(--text)"
                     }}
                   >
-                    {fmtHuman(iso).split(", ").slice(-1)[0]}
+                    {timeOnly}
                   </button>
                 );
               })}
@@ -205,7 +201,11 @@ export function BookingPage() {
 
           <div className="space-y-2">
             <div className="muted">Телефон (необязательно)</div>
-            <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+7 900 123-45-67" />
+            <Input
+              value={phone}
+              onChange={(e: React.ChangeEvent<HTMLInputElement>) => setPhone(e.target.value)}
+              placeholder="+7 900 123-45-67"
+            />
           </div>
 
           <Button
@@ -215,16 +215,18 @@ export function BookingPage() {
               try {
                 setCreating(true);
                 setError(null);
+
                 const res = await apiCreateAppointment({
                   masterId,
                   serviceId: service.id,
                   startAt: selected,
                   phone: phone.trim() || undefined
                 });
+
                 haptic("medium");
                 nav(`/me?created=${res.appointment.id}`);
-              } catch (e: any) {
-                const msg = e?.message ?? "Ошибка";
+              } catch (e: unknown) {
+                const msg = e instanceof Error ? e.message : "Ошибка";
                 setError(msg.includes("slot_taken") ? "Этот слот уже занят. Выберите другой." : msg);
               } finally {
                 setCreating(false);
