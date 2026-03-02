@@ -1,14 +1,39 @@
+// apps/web/src/ui/badge.tsx
 import React from "react";
 
-type Props = React.PropsWithChildren<{ tone?: "neutral" | "good" | "bad"; className?: string }>;
+type Tone = "neutral" | "good" | "warn" | "bad" | "accent";
 
-export function Badge({ tone = "neutral", className, children }: Props) {
-  const base = "inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium";
-  const styles =
+export function Badge(props: React.PropsWithChildren<{ tone?: Tone }>) {
+  const tone = props.tone ?? "neutral";
+
+  const bg =
     tone === "good"
-      ? "border-emerald-500/20 bg-emerald-500/10 text-emerald-200"
+      ? "var(--success-weak)"
+      : tone === "warn"
+      ? "var(--warn-weak)"
       : tone === "bad"
-        ? "border-red-500/20 bg-red-500/10 text-red-200"
-        : "border-neutral-800/70 bg-neutral-950/40 text-neutral-200";
-  return <span className={`${base} ${styles} ${className ?? ""}`}>{children}</span>;
+      ? "var(--danger-weak)"
+      : tone === "accent"
+      ? "var(--accent-weak)"
+      : "rgba(102,112,133,0.14)";
+
+  const fg =
+    tone === "good"
+      ? "var(--success)"
+      : tone === "warn"
+      ? "var(--warn)"
+      : tone === "bad"
+      ? "var(--danger)"
+      : tone === "accent"
+      ? "var(--accent)"
+      : "var(--muted)";
+
+  return (
+    <span
+      className="inline-flex items-center gap-1 px-3 py-1 text-xs font-semibold"
+      style={{ borderRadius: 999, background: bg, color: fg }}
+    >
+      {props.children}
+    </span>
+  );
 }

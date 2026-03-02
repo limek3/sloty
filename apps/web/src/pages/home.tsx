@@ -1,8 +1,9 @@
+// apps/web/src/pages/home.tsx
 import React from "react";
 import { isInTelegram } from "../lib/telegram";
-import { Button } from "../ui/button";
-import { Card, CardContent, CardHeader } from "../ui/card";
 import { AppShell } from "../ui/app-shell";
+import { Card, CardContent, CardHeader } from "../ui/card";
+import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 
 export function HomePage() {
@@ -10,28 +11,28 @@ export function HomePage() {
 
   return (
     <AppShell
-      subtitle="TG Booking"
-      title="Запись на услуги"
+      subtitle="Sloty"
+      title="Запись"
       right={<Badge tone={inTg ? "good" : "neutral"}>{inTg ? "WebApp OK" : "Browser"}</Badge>}
     >
       <Card className="overflow-hidden">
-        <div className="h-28 w-full bg-gradient-to-br from-white/10 via-white/0 to-white/5" />
+        <div style={{ height: 120, background: "linear-gradient(135deg, rgba(47,102,255,0.12), rgba(47,102,255,0.00))" }} />
         <CardHeader>
-          <div className="text-sm font-medium">{inTg ? "Готово" : "Откройте в Telegram"}</div>
+          <div className="text-sm font-semibold">{inTg ? "Готово" : "Откройте в Telegram"}</div>
           <div className="muted">
             {inTg
               ? "Можно управлять записями и кабинетом."
-              : "Эта страница для браузера. Полный функционал работает в Telegram Mini App (нужен initData)."}
+              : "Это превью. Полный функционал работает внутри Telegram Mini App."}
           </div>
         </CardHeader>
-        <CardContent className="space-y-2">
+        <CardContent className="space-y-3">
           {!inTg && (
-            <div className="text-sm text-neutral-300">
-              Открой бота → <span className="chip">Открыть кабинет</span> или ссылку мастера → тогда всё заработает.
+            <div className="muted">
+              Открой бота и запусти WebApp через кнопку — тогда появятся записи и кабинет.
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2 pt-2">
+          <div className="grid grid-cols-2 gap-2">
             <Button variant="secondary" onClick={() => (window.location.href = "/me")} disabled={!inTg}>
               Мои записи
             </Button>

@@ -1,13 +1,13 @@
+// apps/web/src/pages/master-profile.tsx
 import React from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { apiGetMaster, apiListServices } from "../lib/api";
-import { initTelegramUi, haptic } from "../lib/telegram";
-import { Card, CardContent, CardHeader } from "../ui/card";
-import { Button } from "../ui/button";
-import { Skeleton } from "../ui/skeleton";
+import { haptic, initTelegramUi } from "../lib/telegram";
 import type { Master, Service } from "../lib/types";
 import { AppShell } from "../ui/app-shell";
 import { Badge } from "../ui/badge";
+import { Card, CardContent, CardHeader } from "../ui/card";
+import { Skeleton } from "../ui/skeleton";
 
 export function MasterProfilePage() {
   const { masterId = "" } = useParams();
@@ -40,17 +40,18 @@ export function MasterProfilePage() {
     <AppShell
       subtitle="Запись"
       title={loading ? "…" : master?.display_name ?? "Мастер"}
-      right={master?.city ? <Badge>{master.city}</Badge> : null}
+      showNav={false}
+      right={master?.city ? <Badge>{master.city}</Badge> : <button style={{ color: "var(--muted)", fontSize: 14 }} onClick={() => nav("/")}>Главная</button>}
     >
       {master?.bio && <div className="muted">{master.bio}</div>}
-      {error && <div className="text-sm text-red-300">{error}</div>}
+      {error && <div className="text-sm" style={{ color: "var(--danger)" }}>{error}</div>}
 
       <Card>
         <CardHeader>
-          <div className="text-sm font-medium">Услуги</div>
+          <div className="text-sm font-semibold">Услуги</div>
           <div className="muted">Выберите услугу и время</div>
         </CardHeader>
-        <CardContent className="space-y-3">
+        <CardContent className="space-y-2">
           {loading && (
             <>
               <Skeleton className="h-14" />
@@ -59,7 +60,7 @@ export function MasterProfilePage() {
             </>
           )}
 
-          {!loading && services.length === 0 && <div className="text-sm text-neutral-400">Пока нет услуг.</div>}
+          {!loading && services.length === 0 && <div className="muted">Пока нет услуг.</div>}
 
           {!loading &&
             services.map((s) => (
@@ -69,23 +70,22 @@ export function MasterProfilePage() {
                   haptic("light");
                   nav(`/m/${masterId}/book?serviceId=${s.id}`);
                 }}
-                className="w-full rounded-3xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 text-left hover:bg-neutral-900/60 transition"
+                className="w-full px-4 py-3 text-left transition"
+                style={{
+                  borderRadius: 18,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)"
+                }}
               >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{s.title}</div>
-                    <div className="text-xs text-neutral-400">{s.duration_min} мин</div>
+                    <div className="text-sm font-semibold truncate">{s.title}</div>
+                    <div className="muted">{s.duration_min} мин</div>
                   </div>
-                  <div className="text-sm font-semibold whitespace-nowrap">{s.price_rub} ₽</div>
+                  <div className="text-sm font-semibold">{s.price_rub} ₽</div>
                 </div>
               </button>
             ))}
-
-          <div className="pt-1">
-            <Button variant="secondary" onClick={() => nav("/me")}>
-              Мои записи
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </AppShell>

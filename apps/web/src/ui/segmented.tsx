@@ -8,22 +8,34 @@ export function Segmented<T extends string>(props: {
   items: Item<T>[];
 }) {
   return (
-    <div className="glass rounded-2xl p-1 flex gap-1">
-      {props.items.map((it) => {
-        const active = props.value === it.id;
-        return (
-          <button
-            key={it.id}
-            onClick={() => props.onChange(it.id)}
-            className={
-              "flex-1 rounded-2xl px-3 py-2 text-xs transition " +
-              (active ? "bg-white text-black" : "text-neutral-200 hover:bg-neutral-900/60")
-            }
-          >
-            {it.label}
-          </button>
-        );
-      })}
+    <div
+      className="p-1"
+      style={{
+        background: "var(--surface-2)",
+        border: "1px solid var(--border)",
+        borderRadius: "999px"
+      }}
+    >
+      <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${props.items.length}, 1fr)` }}>
+        {props.items.map((it) => {
+          const active = props.value === it.id;
+          return (
+            <button
+              key={it.id}
+              onClick={() => props.onChange(it.id)}
+              className="py-2 text-xs font-medium transition"
+              style={{
+                borderRadius: "999px",
+                background: active ? "var(--surface)" : "transparent",
+                boxShadow: active ? "0 6px 16px rgba(16,24,40,0.08)" : "none",
+                color: active ? "var(--text)" : "var(--muted)"
+              }}
+            >
+              {it.label}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

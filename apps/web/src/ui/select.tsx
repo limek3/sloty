@@ -1,14 +1,21 @@
+// apps/web/src/ui/input.tsx
 import React from "react";
 
-export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
-    <select
+    <input
       {...props}
       className={
-        "w-full rounded-2xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 text-sm " +
-        "outline-none focus:border-neutral-600 focus:ring-2 focus:ring-white/10 transition " +
+        "w-full text-sm font-medium outline-none transition focus:ring-2 focus:ring-[color:var(--ring)] " +
         (props.className ?? "")
       }
+      style={{
+        borderRadius: 16,
+        padding: "12px 14px",
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        color: "var(--text)"
+      }}
     />
   );
 }

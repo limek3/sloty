@@ -1,47 +1,163 @@
+// apps/web/src/pages/master-dashboard.tsx
 import React from "react";
-import { initTelegramUi, haptic } from "../lib/telegram";
+import { useNavigate } from "react-router-dom";
 import {
-  apiMasterCancelAppointment,
-  apiMasterGetWorkingHours,
   apiMasterListAppointments,
   apiMasterListServices,
-  apiMasterMe,
-  apiMasterSetWorkingHours,
-  apiMasterUpsertService,
-  apiMasterDeleteService,
-  apiMasterUpdateProfile
+  apiMasterMe
 } from "../lib/api";
+import { initTelegramUi, haptic } from "../lib/telegram";
+import { fmtHuman, ymd, ymdTodayUtc } from "../lib/time";
+import type { Appointment, Master, Service } from "../lib/types";
+import { AppShell } from "../ui/app-shell";
 import { Card, CardContent, CardHeader } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import type { Appointment, Master, Service, WorkingHour } from "../lib/types";
-import { fmtHuman } from "../lib/time";
-import { AppShell } from "../ui/app-shell";
+import { Select } from "../ui/select";
 import { Badge } from "../ui/badge";
 import { Segmented } from "../ui/segmented";
 
-const weekdays = ["Пн", "Вт", "Ср", "Чт", "Пт", "Сб", "Вс"];
+type Tab = "bookings" | "calendar" | "clients";
+type Scope = "day" | "week";
+
+type ClientItem = {
+  tgId: number;
+  name: string;
+  phone?: string;
+  lastVisitIso?: string;
+  visits: number;
+};
+
+function todayTitleRu(): string {
+  const d = new Date();
+  return new Intl.DateTimeFormat("ru-RU", { day: "numeric", month: "long" }).format(d);
+}
+
+function buildClients(appts: Appointment[]): ClientItem[] {
+  const map = new Map<number, ClientItem>();
+  for (const a of appts) {
+    const id = a.client_tg_user_id ?? 0;
+    if (!id) continue;
+    const cur = map.get(id) ?? { tgId: id, name: `TG ${id}`, visits: 0 };
+    cur.visits += 1;
+    const ts = a.start_at;
+    if (!cur.lastVisitIso || new Date(ts).getTime() > new Date(cur.lastVisitIso).getTime()) cur.lastVisitIso = ts;
+    map.set(id, cur);
+  }
+  return Array.from(map.values()).sort((a, b) => (b.lastVisitIso ? Date.parse(b.lastVisitIso) : 0) - (a.lastVisitIso ? Date.parse(a.lastVisitIso) : 0));
+}
+
+function InternalTabbar(props: { value: Tab; onChange: (t: Tab) => void; onNew: () => void }) {
+  const items: { id: Tab; label: string }[] = [
+    { id: "bookings", label: "Записи" },
+    { id: "calendar", label: "Календарь" },
+    { id: "clients", label: "Клиенты" }
+  ];
+
+  return (
+    <div
+      className="fixed left-0 right-0 bottom-0 z-40"
+      style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+    >
+      <div className="mx-auto max-w-md px-4 pb-4">
+        <div
+          className="px-2 py-2"
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: 26,
+            boxShadow: "var(--shadow)",
+            display: "grid",
+            gridTemplateColumns: "1fr auto 1fr",
+            gap: 8,
+            alignItems: "center"
+          }}
+        >
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+            {items.slice(0, 2).map((it) => {
+              const active = props.value === it.id;
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => props.onChange(it.id)}
+                  className="py-2 text-xs font-semibold transition"
+                  style={{
+                    borderRadius: 18,
+                    background: active ? "var(--accent-weak)" : "transparent",
+                    border: active ? "1px solid rgba(47,102,255,0.22)" : "1px solid transparent",
+                    color: active ? "var(--accent)" : "var(--muted)"
+                  }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <button
+            onClick={props.onNew}
+            className="px-4 py-3 text-sm font-semibold transition active:scale-[0.99]"
+            style={{
+              borderRadius: 18,
+              background: "var(--accent)",
+              color: "var(--accent-fg)",
+              border: "1px solid rgba(47,102,255,0.22)",
+              boxShadow: "0 10px 24px rgba(47,102,255,0.22)"
+            }}
+            aria-label="Новая запись"
+            title="Новая запись"
+          >
+            ＋
+          </button>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 6 }}>
+            {items.slice(2).map((it) => {
+              const active = props.value === it.id;
+              return (
+                <button
+                  key={it.id}
+                  onClick={() => props.onChange(it.id)}
+                  className="py-2 text-xs font-semibold transition"
+                  style={{
+                    borderRadius: 18,
+                    background: active ? "var(--accent-weak)" : "transparent",
+                    border: active ? "1px solid rgba(47,102,255,0.22)" : "1px solid transparent",
+                    color: active ? "var(--accent)" : "var(--muted)"
+                  }}
+                >
+                  {it.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 export function MasterDashboardPage() {
-  const [master, setMaster] = React.useState<Master | null>(null);
-  const [tab, setTab] = React.useState<"profile" | "services" | "schedule" | "appointments">("appointments");
+  const nav = useNavigate();
 
+  const [master, setMaster] = React.useState<Master | null>(null);
   const [services, setServices] = React.useState<Service[]>([]);
-  const [wh, setWh] = React.useState<WorkingHour[]>([]);
   const [appts, setAppts] = React.useState<Appointment[]>([]);
+  const [clients, setClients] = React.useState<ClientItem[]>([]);
   const [loading, setLoading] = React.useState(true);
 
-  const [svcForm, setSvcForm] = React.useState<{ id?: string; title: string; duration_min: string; price_rub: string }>({
-    title: "",
-    duration_min: "60",
-    price_rub: "0"
-  });
+  const [tab, setTab] = React.useState<Tab>("bookings");
+  const [scope, setScope] = React.useState<Scope>("day");
 
-  const [scheduleDraft, setScheduleDraft] = React.useState<Record<number, { start: string; end: string; enabled: boolean }>>(() => {
-    const d: any = {};
-    for (let i = 0; i < 7; i++) d[i] = { start: "10:00", end: "19:00", enabled: i < 5 };
-    return d;
-  });
+  // New booking (screen like reference)
+  const [mode, setMode] = React.useState<"main" | "new">("main");
+  const [clientId, setClientId] = React.useState<string>("");
+  const [serviceId, setServiceId] = React.useState<string>("");
+  const [fromDate, setFromDate] = React.useState(ymdTodayUtc());
+  const [slotDay, setSlotDay] = React.useState(ymdTodayUtc());
+  const [slotTimeIso, setSlotTimeIso] = React.useState<string>("");
+  const [shareUrl, setShareUrl] = React.useState<string>("");
+
+  const [clientSearch, setClientSearch] = React.useState("");
 
   async function loadAll() {
     setLoading(true);
@@ -49,22 +165,15 @@ export function MasterDashboardPage() {
       const me = await apiMasterMe();
       setMaster(me.master);
 
-      const [svc, hours, list] = await Promise.all([
-        apiMasterListServices(),
-        apiMasterGetWorkingHours(),
-        apiMasterListAppointments()
-      ]);
-
+      const [svc, list] = await Promise.all([apiMasterListServices(), apiMasterListAppointments()]);
       setServices(svc.services);
-      setWh(hours.working_hours);
       setAppts(list.appointments);
 
-      const next = { ...scheduleDraft };
-      for (let i = 0; i < 7; i++) next[i] = { ...next[i], enabled: false };
-      for (const r of hours.working_hours) {
-        next[r.weekday] = { start: r.start_time.slice(0, 5), end: r.end_time.slice(0, 5), enabled: true };
-      }
-      setScheduleDraft(next);
+      const cls = buildClients(list.appointments);
+      setClients(cls);
+
+      if (!serviceId && svc.services[0]?.id) setServiceId(svc.services[0].id);
+      if (!clientId && cls[0]?.tgId) setClientId(String(cls[0].tgId));
     } finally {
       setLoading(false);
     }
@@ -72,222 +181,316 @@ export function MasterDashboardPage() {
 
   React.useEffect(() => {
     initTelegramUi();
-    loadAll().catch((e) => alert(e.message ?? e));
+    loadAll().catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function saveSchedule() {
-    const intervals = Object.entries(scheduleDraft)
-      .filter(([, v]) => v.enabled)
-      .map(([k, v]) => ({ weekday: Number(k), start_time: v.start, end_time: v.end }));
+  const filteredClients = clients.filter((c) => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return true;
+    return String(c.tgId).includes(q) || (c.name ?? "").toLowerCase().includes(q);
+  });
 
-    await apiMasterSetWorkingHours(intervals);
-    haptic("medium");
-    await loadAll();
-  }
-
-  async function saveService() {
-    const title = svcForm.title.trim();
-    if (!title) return alert("Название обязательно");
-    const duration = Number(svcForm.duration_min);
-    const price = Number(svcForm.price_rub);
-    const res = await apiMasterUpsertService({
-      id: svcForm.id,
-      title,
-      duration_min: Number.isFinite(duration) ? duration : 60,
-      price_rub: Number.isFinite(price) ? price : 0,
-      is_active: true
-    });
-    haptic("medium");
-    setSvcForm({ title: "", duration_min: "60", price_rub: "0" });
-    setServices((prev) => {
-      const idx = prev.findIndex((x) => x.id === res.service.id);
-      if (idx >= 0) return prev.map((x) => (x.id === res.service.id ? res.service : x));
-      return [res.service, ...prev];
-    });
-  }
-
-  async function cancelAppt(a: Appointment) {
-    await apiMasterCancelAppointment(a.id, "Отменено мастером");
+  function openNew() {
+    setMode("new");
+    setTab("bookings");
+    setShareUrl("");
+    setSlotTimeIso("");
+    setFromDate(ymdTodayUtc());
+    setSlotDay(ymdTodayUtc());
     haptic("light");
-    await loadAll();
   }
 
-  async function saveProfile(patch: Partial<Pick<Master, "display_name" | "city" | "bio">>) {
-    const res = await apiMasterUpdateProfile(patch);
-    setMaster(res.master);
-    haptic("medium");
+  function closeNew() {
+    setMode("main");
+    setShareUrl("");
+    setSlotTimeIso("");
+    haptic("light");
   }
+
+  function makeShareLink() {
+    if (!master) return;
+    // функционально: мастер выбирает услугу/дату/время -> отправляет клиенту ссылку
+    // клиент откроет страницу мастера и увидит нужную услугу/неделю (и выберет слот)
+    const base = window.location.origin;
+    const url = new URL(`${base}/m/${master.id}`);
+    if (serviceId) url.searchParams.set("serviceId", serviceId);
+    if (fromDate) url.searchParams.set("fromDate", fromDate);
+    if (slotTimeIso) url.searchParams.set("hint", slotTimeIso); // мягкая подсказка (UI можно позже подсветить)
+    setShareUrl(url.toString());
+  }
+
+  async function copyOrShare(url: string) {
+    haptic("light");
+    try {
+      if ((navigator as any).share) await (navigator as any).share({ url, title: "Запись" });
+      else await navigator.clipboard.writeText(url);
+    } catch {
+      // ignore
+    }
+  }
+
+  const todayYmd = ymdTodayUtc();
 
   return (
     <AppShell
-      subtitle="Кабинет"
-      title={master?.display_name ?? "…"}
-      right={<Badge>{loading ? "..." : "PRO (MVP)"}</Badge>}
+      subtitle={`Сегодня, ${todayTitleRu()}`}
+      title={mode === "new" ? "Новая запись" : "Кабинет"}
+      right={
+        mode === "new" ? (
+          <Button full={false} size="sm" variant="secondary" onClick={closeNew}>
+            Закрыть
+          </Button>
+        ) : (
+          <Button full={false} size="sm" variant="secondary" onClick={() => loadAll()}>
+            Обновить
+          </Button>
+        )
+      }
     >
-      <div className="muted">{loading ? "Загрузка…" : "Управление услугами, графиком и записями"}</div>
+      <div className="tabbar-safe space-y-4">
+        {/* MODE: NEW BOOKING */}
+        {mode === "new" && (
+          <Card>
+            <CardHeader>
+              <div className="text-sm font-semibold">Новая запись</div>
+              <div className="muted">Сформируйте ссылку и отправьте клиенту в TG</div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="muted">Клиент</div>
+                <Select value={clientId} onChange={(e) => setClientId(e.target.value)}>
+                  {clients.length === 0 && <option value="">Нет клиентов</option>}
+                  {clients.map((c) => (
+                    <option key={c.tgId} value={String(c.tgId)}>
+                      {c.name} • {c.tgId}
+                    </option>
+                  ))}
+                </Select>
+              </div>
 
-      <Segmented
+              <div className="space-y-2">
+                <div className="muted">Услуга</div>
+                <Select value={serviceId} onChange={(e) => setServiceId(e.target.value)}>
+                  {services.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.title} • {s.duration_min} мин • {s.price_rub} ₽
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <div className="muted">Дата (старт)</div>
+                <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+              </div>
+
+              <div className="surface-soft p-4 space-y-2">
+                <div className="text-sm font-semibold">Подсказка времени</div>
+                <div className="muted">Можно выбрать конкретное время (для удобства), но клиент подтвердит сам.</div>
+                <Input
+                  type="datetime-local"
+                  value={slotTimeIso ? slotTimeIso.slice(0, 16) : ""}
+                  onChange={(e) => setSlotTimeIso(e.target.value ? new Date(e.target.value).toISOString() : "")}
+                />
+              </div>
+
+              <Button
+                onClick={() => {
+                  makeShareLink();
+                  haptic("medium");
+                }}
+              >
+                Сформировать ссылку
+              </Button>
+
+              {shareUrl && (
+                <div className="surface-soft p-4 space-y-2">
+                  <div className="text-sm font-semibold">Ссылка для клиента</div>
+                  <div className="muted" style={{ wordBreak: "break-all" }}>
+                    {shareUrl}
+                  </div>
+                  <div className="flex gap-2">
+                    <Button full={false} size="sm" variant="secondary" onClick={() => copyOrShare(shareUrl)}>
+                      Share / Copy
+                    </Button>
+                    <Button full={false} size="sm" variant="ghost" onClick={() => nav(`/m/${master?.id ?? ""}`)}>
+                      Открыть
+                    </Button>
+                  </div>
+                </div>
+              )}
+
+              <div className="muted">
+                Следующий шаг (улучшим): “создать запись вручную” прямо из кабинета + авто-уведомление клиенту.
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* MODE: MAIN */}
+        {mode === "main" && (
+          <>
+            {/* Tabs header-like line */}
+            <div className="flex items-center justify-between">
+              <div className="muted">
+                {tab === "bookings" ? "Записи" : tab === "calendar" ? "Календарь" : "Клиенты"}
+              </div>
+              <Badge tone="accent">{loading ? "…" : "PRO UI"}</Badge>
+            </div>
+
+            {tab === "bookings" && (
+              <>
+                <Segmented
+                  value={scope}
+                  onChange={setScope}
+                  items={[
+                    { id: "day", label: "День" },
+                    { id: "week", label: "Неделя" }
+                  ]}
+                />
+
+                <Card>
+                  <CardHeader>
+                    <div className="text-sm font-semibold">{scope === "day" ? "Сегодня" : "Неделя"}</div>
+                    <div className="muted">
+                      Записей: {appts.length} • Подтверждено: {appts.filter((a) => a.status === "confirmed").length} • Отмен:{" "}
+                      {appts.filter((a) => a.status === "canceled").length}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-2">
+                    {loading && <div className="muted">Загрузка…</div>}
+                    {!loading && appts.length === 0 && <div className="muted">Пока нет записей.</div>}
+
+                    {/* Day list */}
+                    {!loading && scope === "day" && (
+                      <div className="space-y-2">
+                        {appts
+                          .slice()
+                          .sort((a, b) => Date.parse(a.start_at) - Date.parse(b.start_at))
+                          .map((a) => (
+                            <div
+                              key={a.id}
+                              className="px-4 py-3"
+                              style={{
+                                background: "var(--surface)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 18
+                              }}
+                            >
+                              <div className="flex items-start justify-between gap-3">
+                                <div className="min-w-0">
+                                  <div className="text-sm font-semibold">{fmtHuman(a.start_at).split(", ").slice(-1)[0]}</div>
+                                  <div className="text-sm font-semibold truncate">{a.client_tg_user_id ? `Клиент TG ${a.client_tg_user_id}` : "Клиент"}</div>
+                                  <div className="muted">{a.service.title}</div>
+                                </div>
+                                <Badge tone={a.status === "confirmed" ? "good" : a.status === "pending" ? "warn" : a.status === "canceled" ? "bad" : "neutral"}>
+                                  {a.status === "confirmed" ? "Подтверждено" : a.status}
+                                </Badge>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+
+                    {/* Week view (MVP, красиво) */}
+                    {!loading && scope === "week" && (
+                      <div className="surface-soft p-4">
+                        <div className="text-sm font-semibold">Неделя</div>
+                        <div className="muted">Сделаю полноценную сетку “день/время” следующим шагом.</div>
+                        <div className="mt-3 grid grid-cols-7 gap-2">
+                          {Array.from({ length: 7 }).map((_, i) => (
+                            <div
+                              key={i}
+                              className="py-2 text-center text-xs font-semibold"
+                              style={{
+                                borderRadius: 14,
+                                background: "var(--surface)",
+                                border: "1px solid var(--border)",
+                                color: "var(--muted)"
+                              }}
+                            >
+                              {i + 1}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </>
+            )}
+
+            {tab === "calendar" && (
+              <Card>
+                <CardHeader>
+                  <div className="text-sm font-semibold">Календарь</div>
+                  <div className="muted">MVP: быстрый обзор. Дальше сделаем полноценный календарь как на iOS.</div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="surface-soft p-4">
+                    <div className="text-sm font-semibold">Сегодня</div>
+                    <div className="muted">{todayYmd}</div>
+                  </div>
+                  <Button onClick={openNew}>Новая запись</Button>
+                </CardContent>
+              </Card>
+            )}
+
+            {tab === "clients" && (
+              <Card>
+                <CardHeader>
+                  <div className="text-sm font-semibold">Клиенты</div>
+                  <div className="muted">Поиск и история визитов</div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Input value={clientSearch} onChange={(e) => setClientSearch(e.target.value)} placeholder="Поиск" />
+
+                  {filteredClients.length === 0 && <div className="muted">Пока нет клиентов.</div>}
+
+                  <div className="space-y-2">
+                    {filteredClients.map((c) => (
+                      <div
+                        key={c.tgId}
+                        className="px-4 py-3"
+                        style={{ background: "var(--surface)", border: "1px solid var(--border)", borderRadius: 18 }}
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="text-sm font-semibold truncate">{c.name}</div>
+                            <div className="muted">Последний визит: {c.lastVisitIso ? fmtHuman(c.lastVisitIso) : "—"}</div>
+                          </div>
+                          <Badge tone="neutral">{c.visits}</Badge>
+                        </div>
+
+                        <div className="mt-3 flex gap-2">
+                          <Button full={false} size="sm" variant="secondary" onClick={() => { setClientId(String(c.tgId)); openNew(); }}>
+                            Новая запись
+                          </Button>
+                          <Button full={false} size="sm" variant="ghost" onClick={() => copyOrShare(`tg://user?id=${c.tgId}`)}>
+                            TG
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Internal master tabbar like reference */}
+      <InternalTabbar
         value={tab}
-        onChange={setTab}
-        items={[
-          { id: "appointments", label: "Записи" },
-          { id: "services", label: "Услуги" },
-          { id: "schedule", label: "График" },
-          { id: "profile", label: "Профиль" }
-        ]}
+        onChange={(t) => {
+          setTab(t);
+          if (mode !== "main") setMode("main");
+          haptic("light");
+        }}
+        onNew={() => openNew()}
       />
-
-      {tab === "appointments" && (
-        <Card>
-          <CardHeader>
-            <div className="text-sm font-medium">Записи</div>
-            <div className="muted">На ближайшие 14 дней</div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            {appts.length === 0 && <div className="text-sm text-neutral-400">Пока нет записей.</div>}
-            {appts.map((a) => (
-              <div key={a.id} className="rounded-3xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{a.service.title}</div>
-                    <div className="text-xs text-neutral-400 truncate">Клиент TG ID: {a.client_tg_user_id}</div>
-                  </div>
-                  <Badge tone={a.status === "canceled" ? "bad" : "neutral"}>{a.status}</Badge>
-                </div>
-                <div className="text-sm">{fmtHuman(a.start_at)}</div>
-
-                <Button variant="danger" disabled={a.status === "canceled"} onClick={() => cancelAppt(a)}>
-                  {a.status === "canceled" ? "Отменено" : "Отменить"}
-                </Button>
-              </div>
-            ))}
-
-            <Button variant="secondary" onClick={() => loadAll()}>
-              Обновить
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === "services" && (
-        <Card>
-          <CardHeader>
-            <div className="text-sm font-medium">Услуги</div>
-            <div className="muted">Добавить / редактировать</div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <Input value={svcForm.title} onChange={(e) => setSvcForm((p) => ({ ...p, title: e.target.value }))} placeholder="Название услуги" />
-              <div className="grid grid-cols-2 gap-2">
-                <Input value={svcForm.duration_min} onChange={(e) => setSvcForm((p) => ({ ...p, duration_min: e.target.value }))} placeholder="Длительность (мин)" inputMode="numeric" />
-                <Input value={svcForm.price_rub} onChange={(e) => setSvcForm((p) => ({ ...p, price_rub: e.target.value }))} placeholder="Цена (₽)" inputMode="numeric" />
-              </div>
-              <Button onClick={saveService}>{svcForm.id ? "Сохранить" : "Добавить"}</Button>
-            </div>
-
-            <div className="h-px bg-neutral-800/80" />
-
-            {services.length === 0 && <div className="text-sm text-neutral-400">Добавьте первую услугу.</div>}
-
-            {services.map((s) => (
-              <div key={s.id} className="rounded-3xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 space-y-2">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="text-sm font-medium truncate">{s.title}</div>
-                    <div className="text-xs text-neutral-400">
-                      {s.duration_min} мин • {s.price_rub} ₽
-                    </div>
-                  </div>
-                  {s.is_active === false ? <Badge tone="bad">скрыто</Badge> : null}
-                </div>
-
-                <div className="flex gap-2">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setSvcForm({ id: s.id, title: s.title, duration_min: String(s.duration_min), price_rub: String(s.price_rub) })}
-                  >
-                    Редактировать
-                  </Button>
-                  <Button
-                    variant="danger"
-                    onClick={async () => {
-                      await apiMasterDeleteService(s.id);
-                      haptic("light");
-                      setServices((p) => p.map((x) => (x.id === s.id ? { ...x, is_active: false } : x)));
-                    }}
-                  >
-                    Скрыть
-                  </Button>
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === "schedule" && (
-        <Card>
-          <CardHeader>
-            <div className="text-sm font-medium">График</div>
-            <div className="muted">Один интервал на день (MVP)</div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              {weekdays.map((w, i) => {
-                const d = scheduleDraft[i];
-                return (
-                  <div key={w} className="rounded-3xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">{w}</div>
-                      <label className="text-xs text-neutral-300 flex items-center gap-2">
-                        <input
-                          type="checkbox"
-                          checked={d.enabled}
-                          onChange={(e) => setScheduleDraft((p) => ({ ...p, [i]: { ...p[i], enabled: e.target.checked } }))}
-                        />
-                        Рабочий день
-                      </label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Input type="time" value={d.start} onChange={(e) => setScheduleDraft((p) => ({ ...p, [i]: { ...p[i], start: e.target.value } }))} disabled={!d.enabled} />
-                      <Input type="time" value={d.end} onChange={(e) => setScheduleDraft((p) => ({ ...p, [i]: { ...p[i], end: e.target.value } }))} disabled={!d.enabled} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            <Button onClick={saveSchedule}>Сохранить</Button>
-          </CardContent>
-        </Card>
-      )}
-
-      {tab === "profile" && master && (
-        <Card>
-          <CardHeader>
-            <div className="text-sm font-medium">Профиль</div>
-            <div className="muted">Как вас видят клиенты</div>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="space-y-2">
-              <div className="text-xs text-neutral-400">Имя</div>
-              <Input defaultValue={master.display_name} onBlur={(e) => saveProfile({ display_name: e.target.value })} />
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-neutral-400">Город</div>
-              <Input defaultValue={master.city ?? ""} onBlur={(e) => saveProfile({ city: e.target.value || null })} />
-            </div>
-            <div className="space-y-2">
-              <div className="text-xs text-neutral-400">Описание</div>
-              <Input defaultValue={master.bio ?? ""} onBlur={(e) => saveProfile({ bio: e.target.value || null })} />
-            </div>
-            <div className="rounded-3xl border border-neutral-800/70 bg-neutral-950/35 px-4 py-3 text-xs text-neutral-400">
-              masterId: <span className="text-neutral-200">{master.id}</span>
-            </div>
-          </CardContent>
-        </Card>
-      )}
     </AppShell>
   );
 }
